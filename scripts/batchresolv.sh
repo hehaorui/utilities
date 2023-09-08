@@ -14,7 +14,7 @@ ERRMSG=\
 "Invalid argument, usage: domain2ip.sh [-doh] [-s SERVER] [-type {A|AAAA}] [-nthr THREAD_NUMBER]\n\
 The domain list will be read from stdin"
 
-regex4='(?:(?:1[0-9][0-9]\.)|(?:2[0-4][0-9]\.)|(?:25[0-5]\.)|(?:[1-9][0-9]\.)|(?:[0-9]\.)){3}(?:(?:1[0-9][0-9])|(?:2[0-4][0-9])|(?:25[0-5])|(?:[1-9][0-9])|(?:[0-9]))'
+regex4='[0-9]{1,3}.[0-9]{1,3}.[0-9]{1,3}.[0-9]{1,3}'
 regex6='(([0-9a-fA-F]{1,4}:){7}[0-9a-fA-F]{1,4})|(([0-9a-fA-F]{1,4}:){6}:[0-9a-fA-F]{1,4})|(([0-9a-fA-F]{1,4}:){5}(:[0-9a-fA-F]{1,4}){1,2})|(([0-9a-fA-F]{1,4}:){4}(:[0-9a-fA-F]{1,4}){1,3})|(([0-9a-fA-F]{1,4}:){3}(:[0-9a-fA-F]{1,4}){1,4})|(([0-9a-fA-F]{1,4}:){2}(:[0-9a-fA-F]{1,4}){1,5})|([0-9a-fA-F]{1,4}:((:[0-9a-fA-F]{1,4}){1,6}))|(:((:[0-9a-fA-F]{1,4}){1,7})))'
 regex="$regex4"
 
@@ -84,7 +84,7 @@ while IFS= read -r line
 do
   read -u 6
   {
-    dig +short $doh $line $server $type | grep -P -o "$regex"
+    dig +short $doh $line $server $type | grep -oE "$regex"
 
     echo >&6
   }&
