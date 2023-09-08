@@ -3,14 +3,10 @@
 # batchresolv.sh: perform batched dns resovle operation on the domain list read from stdin
 
 fifo_file1="/tmp/$$.fifo"
-fifo_file2="/tmp/$$lock.fifo"
 
 mkfifo $fifo_file1
-mkfifo $fifo_file2
 exec 6<>$fifo_file1
-exec 7<>$fifo_file2
 rm $fifo_file1
-rm $fifo_file2
 
 thread_num=5
 
@@ -84,14 +80,11 @@ for ((i=0;i<${thread_num};i++));do
   echo
 done>&6
 
-echo>&7
-
 while IFS= read -r line
 do
   read -u 6
   {
     dig +short $doh $line $server $type | grep -E -o "$regex"
-    echo >&7
 
     echo >&6
   }&
@@ -100,4 +93,3 @@ done
 wait
 
 exec 6>&-
-exec 7>&-
