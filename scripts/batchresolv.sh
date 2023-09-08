@@ -84,7 +84,7 @@ while IFS= read -r line
 do
   read -u 6
   {
-    dig +short $doh $line $server $type | grep -E -o "$regex"
+    dig +short $doh $line $server $type 
 
     echo >&6
   }&
