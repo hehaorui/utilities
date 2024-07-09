@@ -55,7 +55,7 @@ load_endpoints(){
   local nr_thrd=$2
   local nr_addr=$3
   local tmpfile="/tmp/result.csv.$$"
-  /home/andy/workspaces/cfwarp/CloudflareWarpSpeedTest -ipv6 -o $tmpfile -n $nr_thrd -c $nr_addr -pri $WARP_PRI_KEY -reserved "$WARP_RESERVED"
+  /home/andy/workspaces/cfwarp/CloudflareWarpSpeedTest -ipv6 -o $tmpfile -n $nr_thrd -c $nr_addr -pri $WARP_PRI_KEY -reserved "$WARP_RESERVED" &> /dev/null
   mv $tmpfile $outfile
 }
 
