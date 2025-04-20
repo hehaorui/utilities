@@ -112,7 +112,7 @@ class NetworkMonitor:
         """运行网卡连接检测"""
         processes = {}
         results = {}
-        for interface in self.interfaces:
+        for upstream in self.upstreams:
             # 构建mtr命令
             command = [
                 'mtr',
@@ -121,8 +121,8 @@ class NetworkMonitor:
                 '-i', '1',  # 设置发包间隔为1秒
                 '-T',  # 使用 TCP 模式
                 '-n', # 显示 IP 地址
-                '-I', interface,  # 指定网卡
-                self.upstreams[interface]['testip'],  # 测试IP
+                '-I', upstream["interface"],  # 指定网卡
+                upstream['testip'],  # 测试IP
             ]
             # 启动子进程
             logger.debug(f"即将执行: {' '.join(command)}")
