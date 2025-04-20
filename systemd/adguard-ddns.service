@@ -1,0 +1,25 @@
+[Unit]
+Description=AdGuard Home DDNS Updater
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+ExecStart=/usr/bin/python3 /home/andy/workspaces/utilities/scripts/AdGuardHomeDDNS.py \
+    --interface=ens18 \
+    --subnet=10.0.0.0/8 \
+    --adguard-url=http://<adg-address>:3000 \
+    --adguard-user=<user> \
+    --adguard-password=<password> \
+    --hostname=<hostname> \
+    --domain-suffix=<domain-suffix> \
+    --interval=300 \
+    --log-level=WARNING
+
+Restart=on-failure
+RestartSec=30s
+StandardOutput=journal
+StandardError=journal
+
+[Install]
+WantedBy=multi-user.target
