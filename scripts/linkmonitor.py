@@ -27,12 +27,14 @@ logger = logging.getLogger('NetworkMonitor')
 class NetworkMonitor:
     def __init__(self, upstreams, target_ips, table_id, interval, use_ecmp, dry_run=False):
         # 将上游信息分割为列表
-        self.upstreams = map(
-                            lambda x: {
-                                p: v for p, v in 
-                                zip(["interface", "gateway", "testip"], x.split(","))
-                            }, 
-                            upstreams
+        self.upstreams = list(
+                            map(
+                                lambda x: {
+                                    p: v for p, v in 
+                                    zip(["interface", "gateway", "testip"], x.split(","))
+                                }, 
+                                upstreams
+                            )
                         )
         self.target_ips = target_ips  # 路由表项的目标地址
         self.table_id = table_id
