@@ -25,11 +25,11 @@ def configure_logging(log_level, log_file=None):
 logger = logging.getLogger('NetworkMonitor')
 
 class NetworkMonitor:
-    def __init__(self, interfaces, test_ip, target_ip, table_id, interval, use_ecmp, dry_run=False):
+    def __init__(self, interfaces, test_ip, target_ips, table_id, interval, use_ecmp, dry_run=False):
         # 参数初始化
         self.interfaces = interfaces
         self.test_ip = test_ip  # 链路检测的测试地址
-        self.target_ip = target_ip  # 路由表项的目标地址
+        self.target_ips = target_ips  # 路由表项的目标地址
         self.table_id = table_id
         self.interval = interval
         self.use_ecmp = use_ecmp
@@ -75,24 +75,25 @@ class NetworkMonitor:
                 logger.warning("没有健康的网卡，跳过路由表修改")
                 return False
             
-            # 构建新的路由配置命令
-            command = ['ip', 'route', 'replace', 'table', str(self.table_id), self.target_ip]
-            
-            if self.use_ecmp:
-                # ECMP模式处理
-                for interface in healthy_interfaces:
-                    command += ['nexthop', 'via', interface]
-            else:
-                # 非ECMP模式处理
-                # 只使用第一个健康的网卡
-                command += ['via', healthy_interfaces[0], 'metric', '100']
-            
-            # 执行路由修改命令
-            if not self.dry_run:
-                subprocess.check_call(command)
-                logger.info(f"已执行: {' '.join(command)}")
-            else:
-                logger.info(f"[DRY-RUN] 会执行: {' '.join(command)}")
+            for target_ip in self.target_ips:
+                # 构建新的路由配置命令
+                command = ['ip', 'route', 'replace', 'table', str(self.table_id), target_ip]
+
+                if self.use_ecmp:
+                    # ECMP模式处理
+                    for interface in healthy_interfaces:
+                        command += ['nexthop', 'via', interface]
+                else:
+                    # 非ECMP模式处理
+                    # 只使用第一个健康的网卡
+                    command += ['via', healthy_interfaces[0], 'metric', '100']
+
+                # 执行路由修改命令
+                if not self.dry_run:
+                    subprocess.check_call(command)
+                    logger.info(f"已执行: {' '.join(command)}")
+                else:
+                    logger.info(f"[DRY-RUN] 会执行: {' '.join(command)}")
             
             return True
         except Exception as e:
@@ -195,7 +196,7 @@ monitor = None
 @click.command()
 @click.option('--interfaces', '-i', help='要监控的网卡列表 (逗号分隔)', required=True)
 @click.option('--test-ip', '-t', help='链路检测的测试地址', required=True)
-@click.option('--target-ip', '-T', help='路由表项的目标地址', required=True)
+@click.option('--target-ip', '-T', help='路由表项的目标地址 (可多次指定)', required=True, multiple=True)
 @click.option('--table-id', '-r', help='路由表ID', type=int, default=254, show_default=True)
 @click.option('--interval', '-I', help='检测间隔时间 (秒)', type=float, default=5.0, show_default=True)
 @click.option('--use-ecmp', '-e', help='是否使用ECMP模式', is_flag=True)
