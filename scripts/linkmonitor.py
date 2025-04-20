@@ -43,41 +43,48 @@ class NetworkMonitor:
         self.dry_run = dry_run
         
         # 网卡状态记录
-        self._interface_states = {upstream["interface"]: {'healthy': True, 'last_healthy': None} 
-                                for upstream in self.upstreams}
+        self._upstream_states = {upstream["interface"]: {
+                                        'healthy': True, 'last_healthy': None, 
+                                        'gateway': upstream['gateway'], 
+                                        'testip': upstream['testip']
+                                    } 
+                                    for upstream in self.upstreams
+                                }
         
         # 运行标志
         self.running = True
     
-    def update_interface_state(self, interface, packet_loss):
+    def update_upstream_state(self, interface, packet_loss):
         """更新网卡状态"""
-        current_state = self._interface_states[interface]
+        current_state = self._upstream_states[interface]
         if packet_loss > 5:  # 丢包率超过5%视为断开连接
             if current_state['healthy']:
                 # 状态由健康变为不健康
                 current_state['healthy'] = False
                 current_state['last_healthy'] = datetime.now()
-                logger.warning(f"{interface} 到 {self.test_ip} 的丢包率为 {packet_loss}%, 连接断开")
+                logger.warning("{} 到 {} 的丢包率为 {}%, 连接断开".format(interface, current_state["testip"], packet_loss))
         else:
             if not current_state['healthy']:
                 # 状态由不健康变为健康
                 current_state['healthy'] = True
-                logger.info(f"{interface} 到 {self.test_ip} 的连接已经恢复")
+                logger.info("{} 到 {} 的连接已经恢复".format(interface, current_state["testip"]))
     
-    def get_healthy_interfaces(self):
+    def get_healthy_upstreams(self):
         """获取当前健康的网卡列表"""
         healthy_interfaces = []
-        for interface, state in self._interface_states.items():
+        for upstream in self.upstreams:
+            interface = upstream["interface"]
+            state = self._upstream_states[interface]
             if state['healthy']:
-                healthy_interfaces.append(interface)
+                healthy_interfaces.append({"interface": interface, "state": state})
         return healthy_interfaces
     
     def modify_route(self):
         """修改路由表"""
         try:
-            healthy_interfaces = self.get_healthy_interfaces()
+            healthy_upstreams = self.get_healthy_upstreams()
             
-            if not healthy_interfaces:
+            if not healthy_upstreams:
                 # 如果没有健康的网卡，不修改路由表
                 logger.warning("没有健康的网卡，跳过路由表修改")
                 return False
@@ -88,14 +95,18 @@ class NetworkMonitor:
 
                 if self.use_ecmp:
                     # ECMP模式处理
-                    for interface in healthy_interfaces:
-                        gateway = self.upstreams[interface]['gateway']
+                    for upstream in healthy_upstreams:
+                        interface = upstream['interface']
+                        state = upstream['state']
+                        gateway = state['gateway']
+                        # 添加每个健康网卡的路由
                         command += ['nexthop', 'via', gateway, 'dev', interface]
                 else:
                     # 非ECMP模式处理
                     # 只使用第一个健康的网卡
-                    interface = healthy_interfaces[0]
-                    gateway = self.upstreams[interface]['gateway']
+                    interface = healthy_upstreams[0]["interface"]
+                    state = healthy_upstreams[0]["state"]
+                    gateway = state['gateway']
                     command += ['via', gateway, 'dev', interface, 'metric', '100']
 
                 # 执行路由修改命令
@@ -112,8 +123,8 @@ class NetworkMonitor:
     
     def run_check(self):
         """运行网卡连接检测"""
-        processes = {}
-        results = {}
+        tasks = []
+        results = []
         for upstream in self.upstreams:
             # 构建mtr命令
             command = [
@@ -128,16 +139,18 @@ class NetworkMonitor:
             ]
             # 启动子进程
             logger.debug(f"即将执行: {' '.join(command)}")
-            processes[interface] = subprocess.Popen(command, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+            tasks.append({"upstream": upstream, "subproc": subprocess.Popen(command, stdout=subprocess.PIPE, stderr=subprocess.PIPE)})
         
         # 等待所有子进程完成并获取结果
-        for interface, process in processes.items():
-            output, _ = process.communicate()
+        for t in tasks:
+            subproc = t["subproc"]
+            upstream = t["upstream"]
+            output, _ = subproc.communicate()
             lines = output.decode('utf-8').split('\n')  
 
             # 解析mtr输出结果，获取丢包率
             for line in reversed(lines):
-                if self.upstreams[interface]['testip'] in line:
+                if upstream["testip"] in line:
                     try:
                         packet_loss = float(line.split()[2].strip('%'))
                     except (ValueError, IndexError):
@@ -148,16 +161,18 @@ class NetworkMonitor:
                 packet_loss=100
           
             # 更新网卡状态
-            self.update_interface_state(interface, packet_loss)
-            results[interface] = packet_loss
+            self.update_upstream_state(upstream["interface"], packet_loss)
+            results.append({"interface": upstream["interface"], "packet_loss": packet_loss})
 
         self.log_check_results(results)
 
     def log_check_results(self, results):
       """记录检测结果"""
       logger.info("检测结果:")
-      for interface, packet_loss in results.items():
-        status = "健康" if self._interface_states[interface]['healthy'] else "不健康"
+      for r in results:
+        interface = r['interface']
+        packet_loss = r['packet_loss']
+        status = "健康" if self._upstream_states[interface]['healthy'] else "不健康"
         logger.info(f"  - {interface}: 丢包率 {packet_loss}%, 状态: {status}")
     
     def run(self):
