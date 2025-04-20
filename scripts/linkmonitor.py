@@ -203,7 +203,7 @@ monitor = None
 
 # 使用click库定义命令行参数
 @click.command()
-@click.option('--upstreams', '-u', help='要监控的出口，形式: <interface>,<gateway>,<test-ip>,', required=True, multiple=True)
+@click.option('--upstream', '-u', help='要监控的出口，形式: <interface>,<gateway>,<test-ip>,', required=True, multiple=True)
 @click.option('--target-ip', '-T', help='路由表项的目标地址 (可多次指定)', required=True, multiple=True)
 @click.option('--table-id', '-r', help='路由表ID', type=int, default=254, show_default=True)
 @click.option('--interval', '-I', help='检测间隔时间 (秒)', type=float, default=5.0, show_default=True)
@@ -211,7 +211,7 @@ monitor = None
 @click.option('--dry-run', '-d', help='启用dry-run模式, 只模拟不执行', is_flag=True)
 @click.option('--log-level', '-l', help='日志级别 (DEBUG, INFO, WARNING, ERROR, CRITICAL)', default='INFO', show_default=True)
 @click.option('--log-file', '-L', help='日志文件路径 (不提供此参数则不保存日志到文件)', type=str, default=None)
-def main(upstreams, target_ip, table_id, interval, use_ecmp, dry_run, log_level, log_file):
+def main(upstream, target_ip, table_id, interval, use_ecmp, dry_run, log_level, log_file):
     """启动网络监控脚本"""
     global monitor
     
@@ -219,7 +219,7 @@ def main(upstreams, target_ip, table_id, interval, use_ecmp, dry_run, log_level,
     configure_logging(log_level, log_file)
     
     # 创建监控实例
-    monitor = NetworkMonitor(upstreams, target_ip, table_id, interval, use_ecmp, dry_run)
+    monitor = NetworkMonitor(upstream, target_ip, table_id, interval, use_ecmp, dry_run)
     
     # 注册信号处理程序
     signal.signal(signal.SIGINT, signal_handler)
