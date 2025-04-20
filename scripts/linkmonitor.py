@@ -25,10 +25,15 @@ def configure_logging(log_level, log_file=None):
 logger = logging.getLogger('NetworkMonitor')
 
 class NetworkMonitor:
-    def __init__(self, interfaces, test_ip, target_ips, table_id, interval, use_ecmp, dry_run=False):
-        # 参数初始化
-        self.interfaces = interfaces
-        self.test_ip = test_ip  # 链路检测的测试地址
+    def __init__(self, upstreams, target_ips, table_id, interval, use_ecmp, dry_run=False):
+        # 将上游信息分割为列表
+        self.upstreams = map(
+                            lambda x: {
+                                p: v for p, v in 
+                                zip(["interface", "gateway", "testip"], x.split(","))
+                            }, 
+                            upstreams
+                        )
         self.target_ips = target_ips  # 路由表项的目标地址
         self.table_id = table_id
         self.interval = interval
@@ -36,8 +41,8 @@ class NetworkMonitor:
         self.dry_run = dry_run
         
         # 网卡状态记录
-        self._interface_states = {interface: {'healthy': True, 'last_healthy': None} 
-                                for interface in interfaces}
+        self._interface_states = {upstream["interface"]: {'healthy': True, 'last_healthy': None} 
+                                for upstream in self.upstreams}
         
         # 运行标志
         self.running = True
@@ -60,8 +65,8 @@ class NetworkMonitor:
     def get_healthy_interfaces(self):
         """获取当前健康的网卡列表"""
         healthy_interfaces = []
-        for interface in self.interfaces:
-            if self._interface_states[interface]['healthy']:
+        for interface, state in self._interface_states.items():
+            if state['healthy']:
                 healthy_interfaces.append(interface)
         return healthy_interfaces
     
@@ -82,11 +87,14 @@ class NetworkMonitor:
                 if self.use_ecmp:
                     # ECMP模式处理
                     for interface in healthy_interfaces:
-                        command += ['nexthop', 'via', interface]
+                        gateway = self.upstreams[interface]['gateway']
+                        command += ['nexthop', 'via', gateway, 'dev', interface]
                 else:
                     # 非ECMP模式处理
                     # 只使用第一个健康的网卡
-                    command += ['via', healthy_interfaces[0], 'metric', '100']
+                    interface = healthy_interfaces[0]
+                    gateway = self.upstreams[interface]['gateway']
+                    command += ['via', gateway, 'dev', interface, 'metric', '100']
 
                 # 执行路由修改命令
                 if not self.dry_run:
@@ -114,9 +122,10 @@ class NetworkMonitor:
                 '-T',  # 使用 TCP 模式
                 '-n', # 显示 IP 地址
                 '-I', interface,  # 指定网卡
-                self.test_ip
+                self.upstreams[interface]['testip'],  # 测试IP
             ]
             # 启动子进程
+            logger.debug(f"即将执行: {' '.join(command)}")
             processes[interface] = subprocess.Popen(command, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
         
         # 等待所有子进程完成并获取结果
@@ -126,7 +135,7 @@ class NetworkMonitor:
 
             # 解析mtr输出结果，获取丢包率
             for line in reversed(lines):
-                if self.test_ip in line:
+                if self.upstreams[interface]['testip'] in line:
                     try:
                         packet_loss = float(line.split()[2].strip('%'))
                     except (ValueError, IndexError):
@@ -194,27 +203,23 @@ monitor = None
 
 # 使用click库定义命令行参数
 @click.command()
-@click.option('--interfaces', '-i', help='要监控的网卡列表 (逗号分隔)', required=True)
-@click.option('--test-ip', '-t', help='链路检测的测试地址', required=True)
+@click.option('--upstreams', '-u', help='要监控的出口，形式: <interface>,<gateway>,<test-ip>,', required=True, multiple=True)
 @click.option('--target-ip', '-T', help='路由表项的目标地址 (可多次指定)', required=True, multiple=True)
 @click.option('--table-id', '-r', help='路由表ID', type=int, default=254, show_default=True)
 @click.option('--interval', '-I', help='检测间隔时间 (秒)', type=float, default=5.0, show_default=True)
 @click.option('--use-ecmp', '-e', help='是否使用ECMP模式', is_flag=True)
-@click.option('--dry-run', '-d', help='启用dry-run模式，只模拟不执行', is_flag=True)
+@click.option('--dry-run', '-d', help='启用dry-run模式, 只模拟不执行', is_flag=True)
 @click.option('--log-level', '-l', help='日志级别 (DEBUG, INFO, WARNING, ERROR, CRITICAL)', default='INFO', show_default=True)
 @click.option('--log-file', '-L', help='日志文件路径 (不提供此参数则不保存日志到文件)', type=str, default=None)
-def main(interfaces, test_ip, target_ip, table_id, interval, use_ecmp, dry_run, log_level, log_file):
+def main(upstreams, target_ip, table_id, interval, use_ecmp, dry_run, log_level, log_file):
     """启动网络监控脚本"""
     global monitor
     
     # 配置日志
     configure_logging(log_level, log_file)
     
-    # 分割网卡列表
-    interfaces_list = interfaces.split(',')
-    
     # 创建监控实例
-    monitor = NetworkMonitor(interfaces_list, test_ip, target_ip, table_id, interval, use_ecmp, dry_run)
+    monitor = NetworkMonitor(upstreams, target_ip, table_id, interval, use_ecmp, dry_run)
     
     # 注册信号处理程序
     signal.signal(signal.SIGINT, signal_handler)
