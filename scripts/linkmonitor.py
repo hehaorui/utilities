@@ -50,7 +50,7 @@ class NetworkMonitor:
                                     } 
                                     for upstream in self.upstreams
                                 }
-        
+        self.state_changed = True # 状态是否发生变化
         # 运行标志
         self.running = True
     
@@ -59,12 +59,14 @@ class NetworkMonitor:
         current_state = self._upstream_states[interface]
         if packet_loss > 5:  # 丢包率超过5%视为断开连接
             if current_state['healthy']:
+                self.state_changed = True
                 # 状态由健康变为不健康
                 current_state['healthy'] = False
                 current_state['last_healthy'] = datetime.now()
                 logger.warning("{} 到 {} 的丢包率为 {}%, 连接断开".format(interface, current_state["testip"], packet_loss))
         else:
             if not current_state['healthy']:
+                self.state_changed = True
                 # 状态由不健康变为健康
                 current_state['healthy'] = True
                 logger.info("{} 到 {} 的连接已经恢复".format(interface, current_state["testip"]))
@@ -87,6 +89,11 @@ class NetworkMonitor:
             if not healthy_upstreams:
                 # 如果没有健康的网卡，不修改路由表
                 logger.warning("没有健康的网卡，跳过路由表修改")
+                return False
+            
+            if not self.state_changed:
+                # 如果状态没有变化，不执行路由修改
+                logger.info("网卡状态未变化，跳过路由表修改")
                 return False
             
             for target_ip in self.target_ips:
@@ -116,6 +123,7 @@ class NetworkMonitor:
                 else:
                     logger.info(f"[DRY-RUN] 会执行: {' '.join(command)}")
             
+            self.state_changed = False  # 重置状态变化标志
             return True
         except Exception as e:
             logger.error(f"修改路由表失败: {str(e)}")
