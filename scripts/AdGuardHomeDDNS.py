@@ -151,8 +151,10 @@ def update_adguard_rewrite(interface, subnet, adguard_url,
                         else:
                             # 使用 /rewrite/update API 更新规则
                             update_url = f"{base_url}/control/rewrite/update"
+
+                            # prepare serializable target
                             
-                            update_response = session.post(update_url, json={"target": target, "update": update})
+                            update_response = session.put(update_url, json={"target": {"domain": full_domain, "answer": str(target["answer"])}, "update": update})
                             
                             if update_response.status_code == 200:
                                 logger.warning(f"更新 rewrite 规则成功：{full_domain} -> {current_ip}")
